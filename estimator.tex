@@ -1,0 +1,112 @@
+\vspace{1em}
+
+\subsection{The Estimator}\label{sampling}
+We call this component, the estimator, which connects the detector and the sampler.
+The goal of the estimator is to estimate $\nabla\phi(x^{(c)}_i,y^{(c)}_i,\theta^{(t)})$ (the clean gradient) using $\nabla\phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)})$ (the dirty gradient) and $D(r)$ (the detection results).
+As a strawman approach, one could use all of the previously cleaned data (tuples of dirty and clean records), and use another learning algorithm to relate the two.
+The main challenges with this approach are: (1) the problem of scarcity where errors may affect a small number of records and a small number of attributes and (2) the problem of modeling where if we have an accurate parametric model relating clean to dirty data then why clean the data in the first place. 
+To address these challenges, we propose a light-weight estimator uses a linear approximation of the gradient and only relies on the average change in each feature value.
+Empirically, we find that this estimator provides more accurate early estimates and is easier to tune than the strawman approach until a large amount of data are cleaned (Section \ref{est}).  
+
+\vspace{1em}
+
+\subsection{Linearization Algorithm}
+The basic idea is for every feature $i$ to maintain an average change $\delta_i$ before and after cleaning--estimated from the previously cleaned data.
+This avoids having to design a complex internal model to relate the dirty and clean data, and is based on just estimating sample means.
+This would work if the gradient was linear in the features, and we could write this estimate as:
+\[
+\nabla\phi(x^{(c)}_i,y^{(c)}_i,\theta^{(t)}) \approx \nabla\phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)}) + A \cdot [\delta_1, ..., \delta_p]^{\intercal}
+\]
+The problem is that the gradient $\nabla\phi(\cdot)$ can be a very non-linear function of the features that couple features together.
+For example, even in the simple case of linear regression, the gradient is a non-linear function in $x$:
+\[
+\nabla\phi(x,y,\theta) = (\theta^Tx - y)x
+\]
+It is not possible to isolate the effect of a change of one feature on the gradient.
+Even if one of the features is corrupted, all of the gradient components can be incorrect.
+
+The way that we address this problem is to linearize the gradient, where the matrix $A$ is found by computing a first-order Taylor Series expansion of the gradient.
+If $d$ is the dirty value and $c$ is the clean value, the Taylor series approximation for a function $f$ is given as follows:
+\[
+f(c) = f(d) + f'(d)\cdot(d-c) + ...
+\]
+In our case, the function $f$ is the gradient $\nabla\phi$, and the linear term $f'(d)\cdot(d-c)$ is a linear function in each feature and label:
+\[
+\nabla\phi(x^{(c)}_i,y^{(c)}_i,\theta^{(t)}) \approx 
+\nabla\phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)}) 
+\]
+\[
++ \frac{\partial}{\partial X}\nabla\phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)})
+\cdot (x^{(d)} - x^{(c)}) 
+\]
+\[+ \frac{\partial}{\partial Y}\phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)})\cdot (y^{(d)} - y^{(c)})
+\]
+This can be simplified with two model-dependent matrices $M_x$ (relating feature changes to the gradient) and $M_y$ (relating label changes to the gradient)~\footnote{A number of example linearizations are listed in~\cite{activecleanarxiv}}:
+\[
+\approx \phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)}) + M_x \cdot \Delta x + M_y \cdot \Delta y
+\]
+where $\Delta_x = [\delta_1, ..., \delta_p]^{\intercal}$ is the average change in each feature and $\Delta_y = [\delta_1, ..., \delta_l]^{\intercal}$ is the average change in each label.
+It follows that the resulting sampling distribution is:
+\[
+p(r)\propto\|\nabla\phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)}) + M_x \cdot \Delta_{x} +  M_y \cdot \Delta_{y}\|
+\]
+
+\iffalse
+\subsubsection{More Accurate Early Error Estimates}\label{acc}
+Linearization over avoids amplifying estimation error for small samples.
+Consider the linear regression gradient:
+\[
+\nabla\phi(x,y,\theta) = (\theta^Tx - y)x
+\]
+This can be rewritten as a vector in each component:
+\[
+g[i] = \sum_{i} x[i]^2-x[i]y + \sum_{j \ne i} \theta[j]x[j]
+\]
+This function is already mostly linear in $x$ except for the one quadratic term.
+However, this one quadratic term has potential to amplify errors.
+Consider two expressions:
+\[
+f(x+\epsilon) = (x+\epsilon)^2 = x^2 + 2x\epsilon + \epsilon^2
+\]
+\[
+f(x+\epsilon) \approx f(x) + f'(x)(\epsilon) = x^2 + 2x\epsilon
+\]
+The only difference between the two estimates is the quadratic $\epsilon^2$, if $\epsilon$ is highly uncertain random variable then the quadratic dominates.
+If the variance is large, the Taylor estimate avoids amplifying the error.
+
+
+
+\subsection{Estimation For Adaptive Case}
+A similar procedure holds in the adaptive setting, however, it requires reformulation.
+Here, \sys uses $u$ corruption classes provided by the detector.
+Instead of conditioning on the features that are corrupted, the estimator conditions on the classes.
+So for each error class, it computes a $\Delta_{ux}$ and $\Delta_{uy}$.
+These are the average change in the features given that class and the average change in labels given that class.
+\[
+p(r_u)\propto\|\nabla\phi(x,y,\theta^{(t)}) + M_x \cdot \Delta_{ux} +  M_y \cdot \Delta_{uy}\|
+\] 
+
+Here is an example of using the optimization to select a sample of data for cleaning.
+\begin{example}\label{estex}
+Consider using \sys with an a priori detector.
+Let us assume that there are no errors in the labels and only errors in the features.
+Then, each training example will have a set of corrupted features (e.g., $\{1,2,6\}$, $\{1,2,15\}$).
+Suppose that the cleaner has just cleaned the records $r_1$ and $r_2$ represented as tuples with their corrupted feature set: ($r_1$,$\{1,2,3\}$), ($r_2$,$\{1,2,6\}$).
+For each feature $i$, \sys maintains the average change between dirty and clean in a value in a vector $\Delta_x[i]$ for those records corrupted on that feature. 
+
+Then, given a new record ($r_3$,$\{1,2,3,6\}$), $\Delta_{r_3x}$ is the vector $\Delta_x$ where component $i$ is set to 0 if the feature is not corrupted.
+Suppose the data analyst is using an SVM, then the $M_x$ matrix is as follows:
+\[
+M_x[i,i] = \begin{cases}      
+-y[i] ~~~~~~\text{ if } y\boldsymbol{x}\cdot\theta < 1 \\
+0\ ~~~~~~~\text{ if } y\boldsymbol{x}\cdot\theta \geq 1      
+\end{cases} 
+\]
+Thus, we calculate a sampling weight for record $r_3$:
+\[
+p(r_3) \propto\|\nabla\phi(x,y,\theta^{(t)}) + M_x \cdot \Delta_{r_3x} \|
+\] 
+To turn the result into a probability distribution, \sys normalizes over all dirty records.
+\end{example}
+\fi
+

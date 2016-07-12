@@ -1,0 +1,238 @@
+\section{Problem Formalization}\label{statements}
+\sys is an iterative framework for cleaning data in support of statistical modeling.
+Analysts clean batches of data, which are fed back into the system to intelligently re-train the model, and recommend a next batch of data to clean.
+We will first introduce the terms used in the rest of the paper, describe our assumptions, and define the two problems that we solve in this paper.
+
+\subsection{Assumptions}\label{dmodel}
+In this paper, we use the term \emph{statistical modeling} to describe a well-studied class of analytics problems; ones that can be expressed as the minimization of convex loss functions.
+Examples include linear models (including linear and logistic regression), support vector machines, and in fact, means and medians are also special cases. 
+This class is restricted to supervised Machine Learning, and the result of the minimization is a vector of parameters $\theta$.
+We further assume that there is a one-to-one mapping between records in a relation $R$ and labeled training examples $(x_{i},y_{i})$.
+
+\sys considers data cleaning operations that are applied record-by-record.
+That is, the data cleaning can be represented as a user-defined function $C(\cdot)$ that when applied to a record $r$ and can perform two actions: recover a unique clean record $r' = C(r)$ with the same schema or remove the record $\emptyset = C(r)$.
+\sys is agnostic to how $C(\cdot)$ is implemented, e.g., with software or a manual action by the analyst.
+We define the clean relation as a relation of all of the records after cleaning:
+\[R_{clean} = \cup_i^N C(r_i \in R)\]
+Therefore, for every $r' \in R_{clean}$ there exists a unique $r \in R$ in the dirty data.
+Supported cleaning operations include merging common inconsistencies (e.g., merging ``U.S.A" and ``United States"), filtering outliers (e.g., removing records with values $>1e6$), and standardizing attribute semantics (e.g., ``1.2 miles" and ``1.93 km").
+Our technical report discusses a generalization of this basic data cleaning model called the ``set of records" cleaning model~\cite{activecleanarxiv}.
+In this generalization, the $C(\cdot)$ function is composed of schema preserving \textsf{map} and \textsf{filter} operations applied to the entire dataset.
+This can model problems such batch merging of inconsistencies with a ``find-and-replace".
+We acknowledge that both definitions of data cleaning are limited as they do \emph{not} cover errors that simultaneously affect multiple records such as record duplication or structure such as schema transformation.
+
+\subsection{Notation}\label{notation}
+The user provides a pointer to a dirty relation $R$, a cleaner $C(\cdot)$, a featurizer $F(\cdot)$, and a convex loss problem.
+A total of $k$ records will be cleaned in batches of size $b$, so there will be $T = \frac{k}{b}$ iterations of the algorithm.  
+We use the following notation to represent relevant quantities:
+
+\vspace{0.25em}
+
+\noindent\textbf{Dirty Model: } $\theta^{(d)}$ is the model trained on $R$ (without cleaning). 
+
+\vspace{0.25em}
+
+\noindent\textbf{Dirty Records: } $R_{dirty} \subseteq R$ is the subset of records that are still dirty. As more data are cleaned $R_{dirty} \rightarrow \{\}$.
+
+\vspace{0.25em}
+
+\noindent\textbf{Clean Records: } $R_{clean} \subseteq R$ is the subset of records that are clean, i.e., the complement of $R_{dirty}$.
+
+\vspace{0.25em}
+
+\noindent\textbf{Batches: } $S$ is a batch of data (possibly selected stochastically but with known probabilities) from the records $R_{dirty}$. The clean batch is denoted by $S_{clean} = C(S)$.
+
+\vspace{0.25em}
+
+\noindent\textbf{Clean Model: } $\theta^{(c)}$ is the optimal clean model, i.e., the model trained on a fully cleaned relation. Accuracy and convergence are always with respect to $\theta^{(c)}$.
+
+\noindent\textbf{Current Model: } $\theta^{(t)}$ is the current best model at iteration $t \in \{1,...,\frac{k}{b}\}$, and $\theta^{(0)} = \theta^{(d)}$. 
+
+
+\subsection{System Architecture}\label{syarch}
+The main insight of \sys is to model the interactive data cleaning problem as Stochastic Gradient Descent (SGD)~\cite{bottou2012stochastic}.
+SGD is an iterative optimization algorithm that starts with an initial estimate and then takes a sequence of steps ``downhill'' to minimize an objective function.
+Similarly, in interactive data cleaning, the human starts with a dirty model and makes a series of cleaning decisions to improve the accuracy of the model.
+We formalize the link between these two processes, and since SGD is one of the most widely studied forms of optimization, it has well understood theoretical convergence conditions.
+These theoretical properties give us clear restrictions on different components.
+Figure \ref{sys-arch} illustrates the \sys architecture including the: {\it Sampler}, {\it Cleaner}, \emph{Updater}, {\it Detector}, and {\it Estimator}.
+
+The first step of \sys is initialization. We first initialize $R_{dirty} = R$ and $R_{clean} = \emptyset$.
+The system first trains the model on $R_{dirty}$ to find an initial model $\theta^{(d)}$ that the system will subsequently improve iteratively.
+It turns out that SGD converges for an arbitrary initialization, so $\theta^{(d)}$ need not be very accurate. 
+This can be done by featurizing the dirty records (e.g., using an arbitrary placeholder for missing values), and then training the model.
+
+In the next step, the {\it Sampler} selects a batch of data $S$ from the data that has not been cleaned already. To ensure convergence, the Sampler has to do this in a randomized way, but can assign higher probabilities to some data as long as no data has a zero sampling probability.
+The {\it Cleaner} is user-specified and executes $C(\cdot)$ for each sample record and outputs their cleaned versions.
+The {\it Updater} uses the cleaned batch to update the model using a Gradient Descent step, thus moving the model closer to the true cleaned model (in expectation).
+Finally, the system either terminates due to a stopping condition (e.g., $C(\cdot)$ has been called a maximum number of times $k$, or training error convergence), or passes control to the {\it sampler} for the next iteration.
+
+A user provided {\it Detector} can be used to identify records that are more likely to be dirty (e.g., using data quality rules), and thus improves the likelihood that the next sample will contain true dirty records. Furthermore, the {\it Estimator} uses previously cleaned data to estimate the effect that cleaning a given record will have on the model. These components are optional, but our experiments show that these optimizations can improve model accuracy by up-to 2.5x (Section \ref{comp}).
+
+\begin{figure}[t]
+\centering
+ \includegraphics[width=0.8\columnwidth]{figs/arch.png}
+ \caption{\sysfull allows users to train predictive models while progressively cleaning data but preserves convergence guarantees. Solid boxes are essential components for correctness and 
+ dotted boxes indicate optimizations that can improve model accuracy by up-to 2.5x (Section \ref{comp}) \label{sys-arch}}
+\end{figure}
+
+Going back to the ProPublica example in Section~\ref{s:usecase}:
+\begin{example}\label{archex}
+The analyst chooses to use an SVM model, and manually cleans records by hand (the $C(\cdot)$).  
+\sys initially selects a sample of $50$ records (the default) to show the analyst.
+She identifies records that are dirty, fixes them by normalizing the drug and corporation names with the help of a search engine, and corrects the labels with typographical or incorrect values.
+The system then uses the cleaned records to update the current best model and selects the next sample of $50$.
+The analyst can stop at any time and use the improved model to predict whether a record is fraudulent or not.
+\end{example}
+
+\subsection{Problem Statements}\label{updp}
+
+\vspace{0.5em}
+
+\noindent\textbf{Update Problem: } Given a newly cleaned batch of data $S_{clean}$ and the current best model $\theta^{(t)}$, the model update problem is to calculate $\theta^{(t+1)}$. 
+$\theta^{(t+1)}$ will have some error with respect to the true model $\theta^{(c)}$, which we denote as:
+\[
+error(\theta^{(t+1)}) = \| \theta^{(t+1)} - \theta^{(c)} \|
+\]
+The Update Problem is to update the model with a monotone convergence guarantee such that more cleaning implies a more accurate model.
+
+Since the sample is potentially stochastic, it is only meaningful to talk about expected errors.
+Formally, we require that the expected error is upper bounded by a monotonically decreasing function $\mu$ of the amount of cleaned data:
+\[
+\mathbb{E}(error(\theta^{new})) = O(\mu(\mid S_{clean} \mid))
+\]
+%Intuitively, ``reliable" means that more cleaning should imply more accuracy.
+
+\vspace{0.5em}
+
+\noindent\textbf{Prioritization Problem: } The prioritization problem is to select $S_{clean}$ in such a way that the model converges in the fewest iterations possible. 
+Formally, in each batch of data, every $r$ has a probability $p(r)$ of being included.
+The Prioritization Problem is to select a sampling distribution $p(\cdot)$ to maximize the progress made which each iteration of the update algorithm.
+We derive the optimal sampling distribution for the updates, and show how the theoretical optimum can be approximated, while still preserving convergence.
+
+
+
+
+\iffalse
+
+\subsection{\sys Problem}
+The core problem addressed by \sys is incremental model update while progressively cleaning data.
+
+\begin{problem}[ActiveClean Problem]\label{activeclean}\sloppy
+Let $R$ be a dirty relation, $F(r) \mapsto (x,y)$ be a featurization that maps
+a record $r \in R$ to a feature vector $x$ and label $y$, $\phi$ be a convex regularized loss,
+and $C(r) \mapsto r_{clean}$ be a cleaning technique that maps a record to its cleaned value. 
+Given these inputs, the \sys problem is to return a \textbf{reliable} estimate $\hat{\theta}$ of the clean model for any limit $k$ on the number of times the data cleaning $C(\cdot)$ can be applied.
+
+\vspace{0.5em}
+
+\textbf{Reliable} precisely means that the expected error in this estimate (i.e., L2 difference w.r.t a model trained on a fully cleaned dataset) is bounded above by a monotonic function in $k$ and a monotonic function of the error in the dirty model.
+\end{problem}
+\fi
+
+
+\iffalse
+From a systems perspective, data cleaning and model training happen at very different time scales.
+When humans are involved, per record latencies for data cleaning are orders of magnitude larger than the CPU time needed for model training.
+We can compare recent results in data cleaning to a model training framework like CoCoA implemented on Spark \cite{jaggi2014communication}.
+Per record, BigDansing, a highly optimized automated Spark-based data cleaning system is 15.5x slower than CoCoA\footnote{For CoCoA to reach a precision of 1e-3}.
+Crowd based techniques like CrowdFill \cite{park2014crowdfill} and CrowdER \cite{wang2012crowder} are over 100,000x slower per record. 
+Consequently, all of the optimizations in \sys are designed to address data cleaning latency (i.e., more progress with fewer cleaned records) rather than optimizing for numerical computation (i.e., process fewer records).
+\fi
+
+
+
+\iffalse
+Here is an example application of \sys with our running example:
+\begin{example}
+The analyst first trains her SVM model on the dirty data ignoring the effects of the errors returning a model $\theta^{(d)}$.
+She decides that she has a budget of cleaning $100$ records, and decides to clean the 100 records in batches of 10 (set based on how fast she can clean the data, and how often she wants to see an updated result).
+She initializes \sys with $\theta^{(d)}$.
+\sys samples an initial batch of 10 records.
+She manually cleans those records by merging similar drug names, making corporation names consistent, and fixing incorrect labels.
+After each batch, the model is updated with the most recent cleaning results $\theta^{(t)}$.
+The model improves after each iteration.
+After $t=10$ of cleaning, the analyst has an accurate model trained with 100 cleaned records but still utilizes the entire dirty data.
+\end{example}
+
+
+
+\subsection{Two perspectives on error}
+When faced with such errors there are two contrasting perspectives from the Machine Learning and the Database communities.
+
+\vspace{0.5em}
+
+\noindent\textbf{Existing Database Literature. } 
+Traditionally, cleaning is agnostic to the queries and analysis that happens downstream. 
+This perspective breaks down when cleaning is so expensive that we can only clean a small number of records.
+Ideally, we should clean the records that are most valuable to the downstream analysis.
+
+\vspace{0.5em}
+
+\noindent\textbf{Existing  Machine Learning Literature. } The Machine Learning community has focused on
+designing models that are robust to outliers (i.e., values far away from the typical value)
+For example, in the case of linear regression, we can change the $L_2$ norm to an $L_1$ norm to mitigate the effect of outliers:
+\[
+\phi(x_{i}^T\theta,y_{i}) = \|\theta^Tx_{i} - y_i \|_1
+\]
+The quadratic L2 loss implies that examples that deviate far from the typical example are quadratically penalized as opposed to linearly penalized with the L1 loss.
+There is a natural tradeoff between robustness and efficiency.
+The more robust a technique is, the less efficient it will be (i.e., estimate variance for a fixed number of training examples).
+Robust techniques are best suited for random errors that look significantly different the rest of the examples.
+When errors are systematic, the Machine Learning answer has been to design features in such a way that they are robust to some systematic bias.
+For example, in image processing, scale-invariant feature transforms (SIFT) are widely applied that allow for image models invariant to pose or scaling issues.
+
+\vspace{0.5em}
+
+\noindent\textbf{The \sys Contribution. } We try to bring two perspectives together in this work to address the problem of expensive to clean systematic errors, namely the Database idea of data cleaning and the Machine Learning formalization of empirical risk minimization.
+Some errors require expensive cleaning procedures, increasingly using the crowd, and we joint have a time budget on cleaning and analysis.
+\sys prioritizes cleaning with respect to an estimated impact on the clean model.
+
+\subsection{SampleClean Project}
+
+Traditionally, data cleaning has explored expensive, up-front cleaning of entire datasets for increased query accuracy.
+We proposed the SampleClean problem, in which an analyst cleans a small sample of data, and then estimates the result to an aggregate query e.g., \sumfunc, \countfunc, or \avgfunc.
+The main insight from the SampleClean project is that highly accurate answers for aggregate queries does not require cleaning the full dataset.
+Generalizing this insight, there is a deep relationship between the application (i.e., the query) and how an analyst should budget their effort in data cleaning.
+In fact, \avgfunc and \sumfunc queries are a special case of the convex loss minimization discussed in the previous section:
+\[
+\phi = (x_{i} - \theta)^2
+\]
+
+We then extended the SampleClean work to study cleaning Materialized Views \cite{technicalReport}.
+Suppose base data is updated with insertions, deletions, or updates, we explored how we could efficiently propagate
+changes to a sample of the view instead of the full view.
+Subsequent queries on the view could be answered approximate.
+
+The SampleClean problem inspired an eponymous system that implements sampling, data cleaning, and approximate query processing on the Apache Spark stack \cite{sampleclean}.
+Also included in the Apache Spark stack are Machine Learning libraries including MLlib \cite{mllib} and GraphX \cite{graphx}.
+The in-memory architecture of the Apache Spark stack allows for increasingly interactive analysis \cite{AgarwalMPMMS13, armbrust2015spark}.
+Analysts can prototype data processing workflows on samples to evaluate performance before running expensive batch processing jobs on entire datasets.
+With data cleaning and machine learning libraries in the same software ecosystem, we see a new opportunity for joint optimization for interactive model building.
+
+
+
+\subsection{Stochastic Gradient Descent}
+Sampling is a natural part of any Machine Learning workflow, as stochastic optimization is widely used to fit model parameters.
+The problems described in the previous subsections are often trained using a technique called Stochastic Gradient Descent (SGD) or one of its variants.
+The basic idea of SGD is to draw a data point at random, calculate the gradient at that point, and then update a current best estimate with that gradient.
+\[
+\theta^{(t+1)}\leftarrow\theta^{(t)}-\gamma\nabla\phi(x_{i}^T\theta,y_{i})
+\]
+ SGD can also be applied in a ``mini-batch" mode, where we draw a subset of data $S^{(t)}$ at random and update with the average gradient.
+ \[
+ \theta^{(t+1)}\leftarrow\theta^{(t)}-\frac{\gamma}{\|S^{(t)}\|}\sum_{i\in S^{(t)}}\nabla\phi(x_{i}^T\theta,y_{i})
+ \]
+
+We can use this workflow for designing an anytime data cleaning methodology.
+As data is sampled, we can clean the samples.
+The analyst then can stop at anytime and use the best model at that instant.
+SGD and its variants are well-studied and there are lower-bounds on the convergence rates using these techniques. 
+Recently, a number of works have explored non-uniform sampling distributions for stochastic optimization \cite{zhao2014stochastic, qu2014randomized}.
+The main insight is that non-uniform distributions may on average estimate the gradient accurately.
+In this work, we explore how to design such a non-uniform distribution for iterative data cleaning.
+
+\fi
+
+
+ 

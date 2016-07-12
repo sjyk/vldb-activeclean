@@ -1,0 +1,37 @@
+\section{Selecting Records to Clean}\label{dist-samp}
+The algorithm proposed in Section \ref{update-alg} will convege for 
+any sampling distribution where  $p(\cdot) > 0$ for all records, albeit different distributions will have different convergence rates.
+The sampling algorithm is designed to include records in each batch that are most valuable to the analyst's model with a higher probability.
+
+\subsection{Optimal Sampling Problem}
+Recall that the convergence rate of an SGD algorithm is bounded by $\sigma^2$ which is the variance of the gradient.
+Intuitively, the variance measures how accurately the gradient is estimated from a uniform sample.
+Other sampling distributions, while preserving the same expected value, may have a lower variance.
+Thus, the optimal sampling problem is defined as a search over sampling distributions to find the minimum variance sampling distribution.
+
+\begin{definition}[optimal Sampling Problem]
+Given a set of candidate dirty data $R_{dirty}$, $\forall r \in R_{dirty}$ find sampling probabilities $p(r)$ such that over all samples $S$ of size $k$ it minimizes the variance:
+\[
+\arg\min_p \mathbb{E}(\|g_S - g^*\|^2)
+\]
+\end{definition}
+
+It can be shown~\cite{zhao2014stochastic} that the optimal distribution over records in $R_{dirty}$ is proportional to: $p_i \propto \|\nabla\phi(x^{(c)}_i,y^{(c)}_i,\theta^{(t)})\|$
+Intuitively, this sampling distribution prioritizes records with higher gradients, i.e., make a larger impact during optimization.
+The challenge is that this particular optimal distribution depends on knowing the clean value of a records, which is a chicken-and-egg problem:
+the optimal sampling distribution requires knowing $(x^{(c)}_i,y^{(c)}_i)$; however, we are sampling the values so that they can be cleaned.
+
+One natural solution is to calculate this gradient with respect to the dirty values--implicitly assuming that the corruption is not that severe:
+\[
+p_i \propto \|\nabla\phi(x^{(d)}_i,y^{(d)}_i,\theta^{(t)})\|
+\]
+This solution is highly related to the Expected Gradient Length heuristic that has been proposed before in Active Learning\cite{settles2010active}.
+However, there is additional structure to the data cleaning problem.
+As the analyst cleans more data, we can build a model for how cleaned data relates to dirty data.
+By using the detector from the previous section to estimate the impact of data cleaning, we show that we can estimate the cleaned values.
+We find that this optimization can improve the convergence rate by a factor of 2 in some datasets.
+%Note that as long as every record gets sampled, the algorithm will still converge.
+
+
+
+

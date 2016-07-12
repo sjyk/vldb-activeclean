@@ -1,0 +1,125 @@
+This is BibTeX, Version 0.99d (TeX Live 2013)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: outline.aux
+The style file: abbrv.bst
+Database file #1: ref.bib
+Repeated entry---line 1247 of file ref.bib
+ : @inproceedings{DBLP:conf/sigmod/BergmanMNT15
+ :                                             ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1302 of file ref.bib
+ : @article{bertsekas2011incremental
+ :                                  ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1315 of file ref.bib
+ : @article{dekel2012optimal
+ :                          ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1341 of file ref.bib
+ : @inproceedings{feng2014robust
+ :                              ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1364 of file ref.bib
+ : @inproceedings{guillory2009active
+ :                                  ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1371 of file ref.bib
+ : @article{alexandrov2014stratosphere
+ :                                    ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1402 of file ref.bib
+ : @incollection{bottou2012stochastic
+ :                                   ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1479 of file ref.bib
+ : @article{crotty2014tupleware
+ :                             ,
+I'm skipping whatever remains of this entry
+I was expecting a `,' or a `}'---line 1523 of file ref.bib
+ : 
+ : @misc{keystone,
+(Error may have been on previous line)
+I'm skipping whatever remains of this entry
+Repeated entry---line 1533 of file ref.bib
+ : @article{simpson1951interpretation
+ :                                   ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1551 of file ref.bib
+ : @inproceedings{mayfield2010eracer
+ :                                  ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1566 of file ref.bib
+ : @inproceedings{deshpande2004model
+ :                                  ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1606 of file ref.bib
+ : @inproceedings{DBLP:conf/recsys/KrishnanPFG14
+ :                                              ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1649 of file ref.bib
+ : @inproceedings{DBLP:conf/pervasive/JefferyAFHW06
+ :                                                 ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1666 of file ref.bib
+ : @article{whang2014incremental
+ :                              ,
+I'm skipping whatever remains of this entry
+Repeated entry---line 1681 of file ref.bib
+ : @article{gruenheid2014incremental
+ :                                  ,
+I'm skipping whatever remains of this entry
+A bad cross reference---entry "xiaofeature"
+refers to entry "DBLP:conf/icml/2015", which doesn't exist
+Warning--I didn't find a database entry for "DBLP:conf/icml/2015"
+Warning--to sort, need author or key in sparksurvey
+Warning--to sort, need author or key in bdas
+Warning--to sort, need author or key in tensor
+Warning--to sort, need author or key in nytimes
+Warning--to sort, need author or key in dollarsfordocsa
+Warning--to sort, need author or key in dollarsfordocs
+Warning--to sort, need author or key in or
+Warning--to sort, need author or key in keystone
+Warning--empty publisher in bottou2012stochastic
+Warning--empty publisher in DBLP:series/synthesis/2012Fan
+You've used 47 entries,
+            2118 wiz_defined-function locations,
+            701 strings with 10893 characters,
+and the built_in function-call counts, 14255 in all, are:
+= -- 1206
+> -- 860
+< -- 0
++ -- 349
+- -- 296
+* -- 906
+:= -- 2365
+add.period$ -- 137
+call.type$ -- 47
+change.case$ -- 287
+chr.to.int$ -- 0
+cite$ -- 57
+duplicate$ -- 587
+empty$ -- 1255
+format.name$ -- 296
+if$ -- 2990
+int.to.chr$ -- 0
+int.to.str$ -- 47
+missing$ -- 41
+newline$ -- 230
+num.names$ -- 78
+pop$ -- 459
+preamble$ -- 1
+purify$ -- 242
+quote$ -- 0
+skip$ -- 336
+stack$ -- 0
+substring$ -- 322
+swap$ -- 79
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 184
+warning$ -- 10
+while$ -- 85
+width$ -- 49
+write$ -- 454
+(There were 17 error messages)

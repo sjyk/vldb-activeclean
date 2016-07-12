@@ -1,0 +1,141 @@
+\section{Iterative Data Cleaning}\label{background}
+This section introduces the problem of iterative data cleaning through an example application.
+
+\subsection{Use Case: Dollars for Docs}\label{s:usecase}
+ProPublica collected a dataset of corporate donations to medical researchers to analyze conflicts of interest~\cite{dollarsfordocsa}. 
+For reference, the dataset has the following schema:
+{\ssmall\begin{verbatim}
+Contribution(
+ pi_specialty text, # PI's medical specialty
+ drug_nm text ,  # drug brand name, null if not drug
+ device_nm text, # device brand name, null if not a device
+ corp text,      # name of pharamceutical donor
+ amount float,   # amount donated
+ dispute bool,   # whether the research is disputed
+ status text     # if the donation is allowed 
+                 # under research protocol
+)
+\end{verbatim}
+}
+
+\vspace{1.5em}
+
+% \begin{lstlisting}[mathescape,basicstyle={\small}]
+% Contribution(pi_specialty$\textrm{,}$ drug_name$\textrm{,}$ device_name$\textrm{,}$
+% $~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~$corporation$\textrm{,}$ amount$\textrm{,}$ dispute$\textrm{,}$ status)
+% \end{lstlisting}
+% 
+% \noindent\texttt{pi\_specialty:} textual attribute describing the specialty of the doctor receiving the donation.
+% 
+% \noindent\texttt{drug\_name:} branded name of the drug in the research study (null if not a drug).
+% 
+% \noindent\texttt{device\_name} is the branded name of the device in the study (null if not a device).
+% 
+% \noindent\texttt{corporation} is the name of the pharmaceutical providing the donation.
+% 
+% \noindent\texttt{amount} is a numerical attribute representing the donation amount.
+% 
+% \noindent\texttt{dispute} is a Boolean attribute describing whether the research was disputed.
+% 
+% \noindent\texttt{status} is a string label describing whether the  donation was allowed under the declared research protocol. The goal is to predict disallowed  donation. 
+
+
+
+%Some of these donations are flagged as suspicious after careful manual review.
+%We collected the raw data and explored whether suspect donations could be predicted with an Support Vector Machine model.
+
+The dataset comes with a \texttt{status} field that describes whether or not the donation was allowed under the declared research protocol.
+Unfortunately the dataset is dirty, and there are inconsistent ways to specify ``allowed'' or ``disallowed''.
+The ProPublica team identified the suspicious donations via extensive manual review (documented in ~\cite{dollarsfordocs}).
+However, new donation datasets are continuously released and would need to be analyzed by hand.
+Thus, let us consider an alternative ActiveClean-based approach to train a model to predict the true \texttt{status} value.
+This is necessary for several reasons: 1) training a model on the raw data would not work because the \texttt{status} field is often inconsistent and incorrect;
+2) techniques such as active learning are only designed for acquiring {\it new} labels and not suitable for finding and fixing {\it incorrect} labels;
+and 3) other attributes such as company name may also be inconsistent (e.g., Pfizer Inc., Pfizer Incorporated, Pfizer) and need to be canonicalized before they are useful
+for training the model.
+%This problem is typical of analysis scenarios based on observational data seen in finance, insurance, medicine, and investigative journalism.
+
+During our analysis, we found that nearly 40,000 of the 250,000 records had some form of inconsistency.
+Indeed, these errors were structural rather than random---disallowed donations were more likely to have an incorrect \texttt{status} value.
+In addition, larger pharmaceutical comparies were more likely to have inconsistent names, and more likely to make disallowed donations.
+Without cleaning company names, a model would miss-predict many large pharmaceutical donations.
+In fact, we found that the true positive rate for predicting disallowed donations when training an SVM model on the raw data was only 66\%.
+In contrast, cleaning the entire dataset improves this rate to 97\% (Section \ref{exp:dfd}), and we show in the experiments that ActiveClean
+can achieve comparable model accuracy (< 1\% of the true model accuracy) while expending only 10\% of the data cleaning effort.
+The rest of this section will introduce the key challenges in designing a Machine-Learning-oriented iterative data cleaning framework.
+
+
+
+% Suppose instead that we train a classification model to predict the \texttt{status} field of a donation, which can be used to focus manual analysis efforts in the future.
+% Unfortunately, errors in the rest of the dataset make training such a model difficult.  this dataset contains numerous errors that needed to be cleaned before publication
+% %and in the Technical Report~\cite{activecleanarxiv}).
+% For example, company names were often inconsistently represented in the data, e.g., Pfizer Inc., Pfizer Incorporated, Pfizer.
+% A crucial data cleaning operation is to canonicalize these various names.
+% \reminder{Why would duplicates reduce correlation?  How does that affect propublica/svm?}.
+% Duplicate representations could artificially reduce the correlation between certain companies and suspected contributions.
+% Furthermore, donation records were often inconsistently flagged, e.g. Suspicious, Review, Disallowed.
+% Nearly 40,000 of the 250,000 records had some form of inconsistency.
+% 
+% When we analyzed this data, we found that the errors were indeed structural and not random.  %were not random and were correlated with the eventual prediction.
+% First, records that were suspicious were more likely to have an inconsistent flagging attribute.
+% Next, the names of the larger pharmaceutical companies were also more likely to have inconsistent names, and it turns out that these companies were also more likely to provide a flagged donation.
+% Without data cleaning, the true positive rate of an SVM model is only 66\%.
+% Applying the data cleaning to the entire dataset improved this rate to 97\% in the clean data (Section \ref{exp:dfd}).
+% This problem is typical of analysis scenarios based on observational data seen in finance, insurance, medicine, and investigative journalism.
+% 
+
+\iffalse
+\begin{figure}[t]
+\centering
+ \includegraphics[width=0.8\columnwidth]{figs/workflow.png}
+ \caption{Analysts often clean data interactively with data analytics; iteratively cleaning some data and re-training on a partially clean dataset to evaluate whether the cleaning was effective. It is common to use the preliminary analysis on dirty data as a guide to help identify potential errors and design repairs. \label{cartoon}}
+\end{figure}
+\fi
+
+\subsection{Iteration in Model Construction}\label{alcmp}
+Consider an analyst designing a classifier for this dataset.
+When she first develops her model on the dirty data, she will find that the detection rate (true positives predicted) is quite low 66\%.
+To investigate why she might examine those records that are incorrectly predicted by the classifier.
+
+It is common for analysts to use the preliminary analysis on dirty data as a guide to help identify potential errors and design repairs~\cite{kandel2012}.
+For example, our analyst may discover that there are numerous examples where two records are nearly identical, but one is predicted correctly, and one is incorrect, and their only difference is the \texttt{corporation} attribute: Pfizer and Pfizer Incorporated.
+Upon discovering such inconsistencies, she will merge those two attribute values, re-train the model, and repeat this process.
+
+We define iterative data cleaning to be the process of cleaning subsets of data, evaluating preliminary results, and then cleaning more data as necessary.
+\sys explores two key questions about this iterative process: (1) \emph{Correctness.} Will this clean-retrain loop converge to the intended result and (2) \emph{Efficiency.} How can we best make use of the existing data and analyst effort.
+
+\vspace{0.5em}
+\noindent \textbf{Correctness: } The straight-forward application of data cleaning is to repair the corruption in-place, and re-train the model after each repair.
+However, this process has a crucial flaw, where a model is trained on a mix of clean and dirty data.
+It is known that aggregates over mixtures of different populations of data can result in spurious relationships due to the well-known phenomenon called Simpson's paradox \cite{simpson1951interpretation}.
+Simpson's paradox is by no means a corner case, and it has affected the validity of a number of high-profile studies~\cite{pearl2003causality}.
+Figure \ref{update-arch1} illustrates a simple example where such a process can lead to unreliable results, where artificial trends introduced by the mixture can be confused for the effects of data cleaning.
+The consequence is that after applying a data cleaning operation on a subset of data the analyst cannot be sure if it makes the model more or less accurate.
+\sys provides an update algorithm with a monotone convergence guarantee where more cleaning is leads to a more accurate result in expectation.
+
+\vspace{0.5em}
+\noindent \textbf{Efficiency: } One could alternatively avoid the mixing problem by taking a small sample of data up-front, perfectly cleaning it, and then training a model.
+This approach is similar to SampleClean \cite{wang1999sample}, which was proposed to approximate the results of aggregate queries by applying them to a clean sample of data.
+However, high-dimensional models are highly sensitive to sample size, and it is not uncommon to have models whose training data complexity is exponential in the dimensionality (i.e., the curse of dimensionality).
+Figure \ref{update-arch1}c illustrates that, even in two dimensions, models trained from small samples can be as incorrect as the mixing solution described before.
+Sampling further has a problem of scarcity, where errors that are rare may not show up in the sample.
+\emph{\sys uses a model trained on the dirty data as an initialization and uses this model as guide to identify future data to clean.}
+
+\vspace{0.5em}
+\noindent \textbf{Comparison to Active Learning: } The motivation of \sys similar to that of Active Learning~\cite{DBLP:journals/pvldb/YakoutENOI11,gokhale2014corleone} as both seek to reduce the number of queries to an analyst or a crowd.
+However, active learning addresses a fundamentally different problem than \sys.
+Active Learning poses the problem of iteratively selecting the most informative {\it unlabeled} examples to label in partially labeled datasets---these
+examples are labeled by an expert and integrated into the machine learning model.
+Note that active learning does not handle cases where the dataset is labelled incorrectly but only cases where labels are missing.
+In contrast, \sys studies the problem of prioritizing modifications to both features and labels in existing examples.
+In essence, \sys handles incorrect values in {\it any} part (label or feature) of an example.
+This property changes the type of analysis and algorithms that can be used.
+Consequently, our experiments find that general active learning approaches (e.g., uncertainty sampling~\cite{settles2010active}) converge slower than \sys. 
+If the only form of data error was missing labels, then we would expect active learning to perform comparably or better than \sys.
+
+%This would be like Active Learning, where instead of unlabled data, there are inaccurate prior estimates for the labels.
+%\sys reduces to a form of Expected Gradient Length Active Learning when there is no structure in the dirty data to exploit (such as completely missing attribute values).
+
+
+
+

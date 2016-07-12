@@ -1,0 +1,80 @@
+\vspace{2em}
+\section{Dirty Data Detection}\label{det}
+If corrupted records are relatively rare, sampling might be very inefficient.
+The analyst may have to sample many batches of data before finding a corrupted record.
+In this section, we describe how we can couple \sys with prior knowledge about which data are likely to be dirty.
+In the data cleaning literature, error detection and error repair are treated as two distinct problems~\cite{DBLP:series/synthesis/2012Fan, Dasu:2003:EDM:861869, rahm2000data}.
+ Error detection is often considered to be substantially easier than error repair since one can declare a set of integrity rules on a database (e.g., an attribute must not be NULL), and select rows that violate those rules.
+On the other hand, repair is harder and often requires human involvement (e.g., imputing a value for the NULL attribute).
+
+\subsection{Detection Problem}
+First, we describe the required properties of the dirty data detector.
+The detector returns two important aspects of a record: 
+(1) whether the record is dirty, and (2) if it is dirty, on which attributes there are errors.
+The sampler can use (1) to select a subset of dirty records to sample at each batch and 
+the estimator can use (2) to estimate the value of data cleaning based on other records with the same corruption.
+
+\begin{definition}[Detector]
+Let $r$ be a record in $R$. A detector is a function that returns a Boolean of whether the record is dirty and a set of attributes $e_r$ that are dirty.
+\[
+D(r) = (\{0,1\}, e_r)
+\]
+\end{definition}
+
+From the set of attributes that are dirty, we can find the corresponding features that are dirty $f_r$ and labels that are dirty $l_r$ since we assume a one-to-one mapping between records and training examples.
+We will consider two types of detectors: exact rule-based detectors that detect integrity constraint or functional dependency violations, and approximate adaptive detectors that learn which data are likely to be dirty.
+
+\subsection{Rule-Based Detector}\label{rule-det}
+Data quality rules are widely studied as a technique for detecting data errors.
+In most rule-based frameworks, an analyst declares a set of rules $\Sigma$ and checks whether a relation $R$ satisfies those rules.  The rules rules can be declared in advance before applying \sys, or constructed from the first batch of sampled data.
+\sys is compatible with many commonly used classes of rules for error detection including integrity constraints (ICs), conditional functional dependencies (CFDs), and matching dependencies (MDs).
+The only requirement on the rules is that there is an algorithm to enumerate the set of records that violate at least one rule.
+
+Let $R_{viol}$ and $R_{sat}$ be the subset of records in $R_{ditry}$ that violate at least one rule and satisfy all rules respectively.
+The rule-based detector modifies the update workflow in the following way:
+\begin{enumerate}
+\item $R_{clean} = R_{clean} \cup R_{sat}$
+\item $R_{dirty} = R_{viol}$
+\item Apply the algorithm in Section \ref{update-alg}.
+\end{enumerate}
+
+\begin{example}[Rule-Based Detection]\label{detex1}
+An example of a rule on the running example dataset is that the \texttt{status} of
+a contribution can be only ``allowed" or ``disallowed".
+Any other value for \texttt{status} is considered violation.
+\end{example}
+
+\vspace{2em}
+
+\subsection{Adaptive Detection}
+Rule-based detection is not possible in all cases, especially in cases where the analyst selectively modifies data.
+This is why we propose an alternative called the adaptive detector.
+Essentially, we reduce the problem to training a classifier on previously cleaned data.
+Note that this ``learning" is distinct from the ``learning" in the user-specified statistical model.
+One challenge is that the detector needs to describe how the data is dirty.
+The detector achieves this by categorizing the corruption into $u$ classes, and using a multi-class classifier.
+These classes are corruption categories that do not necessarily align with features, but every record is classified with at most one category.
+
+When using adaptive detection, the repair step has to clean the data and report to which of the $u$ classes the corrupted record belongs.
+When an example $(x,y)$ is cleaned, the repair step labels it with one of the ${\text{clean}, 1,2,...,u}$.
+It is possible that $u$ increases each iteration as more types of dirtiness are discovered.
+In many real world datasets, data errors have locality, where similar records tend to be similarly corrupted.
+There are usually a small number of error classes even if a large number of records are corrupted.
+This problem can be addressed by any classifier, and we use an all-versus-one Logistic Regression in our experiments.
+
+The adaptive detector modifies the update workflow in the following way:
+\begin{enumerate}
+\item Let $R_{clean}$ be the previously cleaned data, and let $U_{clean}$ be a set of labels for each record indicating the error class and if they are dirty or ``not dirty''.
+\item Train a classifier to predict the label \textsf{Train}$(R_{clean}, U_{clean})$
+\item Apply the classifier to the dirty data \textsf{Predict}$(R_{dirty})$
+\item For all records predicted to be clean, remove from $R_{dirty}$ and append to $R_{clean}$.
+\item Apply the algorithm in Section \ref{update-alg}.
+\end{enumerate}
+
+The precision and recall of this classifier should be tuned to favor classifying a record as dirty to avoid falsely moving a dirty record into $R_{clean}$. In our experiments, we set this value to $0.90$ probability of the ``clean" class.
+
+
+
+
+
+
